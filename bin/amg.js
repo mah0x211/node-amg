@@ -14,7 +14,7 @@ var pkg = {
     fs = require('fs'),
     assert = require('assert'),
     util = require('util'),
-    exec = require('child_process').exec,
+    spawn = require('child_process').spawn,
     proves = require('proves');
 
 // shared variables
@@ -37,7 +37,7 @@ function exit( var_args )
     process.exit(0);
 }
 
-function changeDir()
+function changeDir( callback )
 {
     var cwd = process.argv[2];
     
@@ -48,13 +48,31 @@ function changeDir()
     else if( !( cwd = proves.is.dir( cwd ) ) ){
         exit( 'target dir %s not found', process.argv[2] );
     }
-    // change working directory
-    else {
+    else
+    {
+        var npm;
+        
+        // change working directory
         print.info( 'chdir: %s', cwd );
         process.chdir( cwd );
+        // install dependencies by npm with package.json
+        npm = spawn( 'npm', ['install','.'] );
+        npm.stdout.on( 'data', function(data){
+            print.info( (''+data).replace( /[\r\n]/g, '' ) );
+        });
+        npm.stderr.on('data',function(data){
+            print.error( (''+data).replace( /[\r\n]/g, '' ) );
+        });
+        npm.on('close',function(code)
+        {
+            if( code ){
+                exit( 'failed to npm install %d', code );
+            }
+            else {
+                callback( cwd );
+            }
+        });
     }
-    
-    return cwd;
 }
 
 function readConfig()
@@ -161,9 +179,10 @@ function main()
         };
     
     print.info( 'start amalgamation...' );
-    changeDir();
-    buildCfg = readConfig();
-    nextBuild();
+    changeDir(function(cwd){
+        buildCfg = readConfig();
+        nextBuild();
+    });
 }
 
 main();
